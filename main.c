@@ -1,4 +1,4 @@
-/* TODO: Massive cleanup */
+/* TODO: Massive cleanup, balance, fix collision detection */
 #include <stdio.h>
 #include <stdlib.h>
 #include <SDL/SDL.h>
@@ -109,7 +109,7 @@ void select_desired_direction(struct organism *o, int ignore)
 		//u[2] = score_agg    = (MAX_DISTANCE-distance(o->x, o->y, center_x, center_y)) * o->genetics.aggressiveness;
 	}
 	
-	if(o->near_enemy_dist < 3) {
+	if(o->near_enemy_dist < 8) {
 		u[2] = score_agg = score_agg * (MAX_DISTANCE-o->near_enemy_dist);
 	}
 	
@@ -426,12 +426,12 @@ void do_update(struct organism *o)
 void draw_objects()
 {
 	SDL_Rect r;
-	r.h = r.w = 3;
-	r.x = hive_x-1;
-	r.y = hive_y-1;
+	r.h = r.w = 5;
+	r.x = hive_x-2;
+	r.y = hive_y-2;
 	SDL_FillRect(screen, &r, SDL_MapRGB(screen->format, 0, 255, 0));
-	r.x = food_x-1;
-	r.y = food_y-1;
+	r.x = food_x-2;
+	r.y = food_y-2;
 	SDL_FillRect(screen, &r, SDL_MapRGB(screen->format, 100, 100, 255));
 }
 

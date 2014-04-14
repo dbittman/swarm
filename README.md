@@ -25,7 +25,7 @@ where MAX_DISTANCE is the largest distance in that world (corner to corner). The
 the highest score is selected.
 
 There are some exceptions: claustrophobia can only take effect if the neighboring organism is within
-3 pixels. In addition, aggressiveness is amplified at close range: All of these scores respond inversely linearly
+8 pixels. In addition, aggressiveness is amplified at close range: All of these scores respond inversely linearly
 with distance from the target. Aggressiveness responds like an inverse square law at short distances (if you get really
 close to an enemy, you become VERY aggressive).
 
