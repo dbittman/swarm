@@ -1,3 +1,4 @@
+/* TODO: Massive cleanup */
 #include <stdio.h>
 #include <stdlib.h>
 #include <SDL/SDL.h>
@@ -6,7 +7,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <signal.h>
-
+/* screen size stuff */
 #define WIDTH  800
 #define HEIGHT 600
 #define MAX_DISTANCE 1000
@@ -17,17 +18,27 @@
 #define ORG_TYPE_BEE  1
 #define ORG_TYPE_BIRD 2
 
-#define AIR_RESIST 0.1
+/** configuration **/
 
-#define MAX 30
+#define AIR_RESIST 0.1 /* how much an organism is slowed down by the 'air' */
 
-#define HEALTH 400
+#define MAX 20         /* maximum value for a gene */
+#define MAX_SPEED 8    /* maximum value for the speed gene */
+#define MAX_MUT (MAX*2)/* maximum value a mutation can have */
 
-#define HEAL 8
+#define HEALTH 400     /* starting health of a bird */
 
-#define DELAY 12
+#define HEAL 8         /* how much a bird is healed when it eats a bee */
 
-#define GAME_LENGTH 10
+#define DELAY 16       /* how many milliseconds to pause between each tick */
+
+#define GAME_LENGTH 10 /* how many seconds per generation */
+
+#define MUTATION_RATE 0.03 /* how likely it is that an organism will have a mutation */
+
+/* these control the result of the fitness calculation function */
+#define KILLS_REWARD 10
+#define FOOD_REWARD 1
 
 SDL_Surface *screen;
 
@@ -493,7 +504,7 @@ void set_random_genes(int type)
 	for(i=s;i<e;i++)
 	{
 		creatures[i].genetics.accel  = ((double)random() / RAND_MAX) * MAX;
-		creatures[i].genetics.speed  = ((double)random() / RAND_MAX) * MAX;
+		creatures[i].genetics.speed  = ((double)random() / RAND_MAX) * MAX_SPEED;
 		creatures[i].genetics.attack = ((double)random() / RAND_MAX) * MAX;
 		creatures[i].genetics.aggressiveness = ((double)random() / RAND_MAX) * MAX;
 		creatures[i].genetics.claustrophobia = ((double)random() / RAND_MAX) * MAX;
@@ -554,20 +565,71 @@ void getInput()
 	}
 }
 
+int calc_fitness(int type, struct organism *o)
+{
+	if(type == ORG_TYPE_BEE)
+	{
+		return o->kills * KILLS_REWARD + o->brought_food * FOOD_REWARD + 1;
+	}
+	return o->kills + o->health + 1;
+}
+
+void mutate(struct organism *o)
+{
+	double r = random();
+	if(r / RAND_MAX < MUTATION_RATE)
+	{
+		int gene = random() % 8;
+		float val = ((double)random() / RAND_MAX) * MAX_MUT;
+		switch(gene) {
+			case 0:
+				o->genetics.accel = val;
+				break;
+			case 1:
+				o->genetics.aggressiveness = val;
+				break;
+			case 2:
+				o->genetics.attack = val;
+				break;
+			case 3:
+				o->genetics.claustrophobia = val;
+				break;
+			case 4:
+				o->genetics.determination = val;
+				break;
+			case 5:
+				o->genetics.friendliness = val;
+				break;
+			case 6:
+				o->genetics.frightfulness = val;
+				break;
+			case 7:
+				o->genetics.speed = (val / MAX_MUT) * MAX_SPEED;
+				break;
+		}
+	}
+}
+
 void selection()
 {
 	int num_alive_bees=0;
+	int true_num_alive_bees=0;
 	/* bees that haven't moved are considered dead */
 	int i;
+	int fit_bees=0;
 	for(i=0;i<NUM_BEES;i++)
 	{
 		struct organism *o = &creatures[i];
-		if(!o->dead && o->moved && o->brought_food)
-			num_alive_bees++;
+		if(!o->dead && o->moved && o->brought_food) {
+			o->fitness = calc_fitness(ORG_TYPE_BEE, o);
+			fit_bees += o->fitness;
+			num_alive_bees+=o->fitness;
+			true_num_alive_bees++;
+		}
 	}
 	
 	if(!num_alive_bees) {
-		printf("Randomizing genes (bees)\n");
+		printf("  randomizing genes (bees)\n");
 		set_random_genes(ORG_TYPE_BEE);
 	}
 	
@@ -576,21 +638,30 @@ void selection()
 	for(i=0;i<NUM_BEES && num_alive_bees;i++)
 	{
 		struct organism *o = &creatures[i];
-		if(!o->dead && o->moved && o->brought_food)
-			memcpy(&parents_bees[j++], o, sizeof(*o));
+		if(!o->dead && o->moved && o->brought_food) {
+			int k;
+			for(k=0;k<o->fitness;k++)
+				memcpy(&parents_bees[j++], o, sizeof(*o));
+		}
 	}
 	
 	int num_alive_birds=0;
+	int true_num_alive_birds=0;
+	int fit_birds=0;
 	/* bees that haven't moved are considered dead */
 	for(i=NUM_BEES;i<NUM_BIRDS+NUM_BEES;i++)
 	{
 		struct organism *o = &creatures[i];
-		if(!o->dead && o->moved)
-			num_alive_birds++;
+		if(!o->dead && o->moved) {
+			o->fitness = calc_fitness(ORG_TYPE_BIRD, o);
+			fit_birds += o->fitness;
+			num_alive_birds+=o->fitness;
+			true_num_alive_birds++;
+		}
 	}
 	
 	if(!num_alive_birds) {
-		printf("Randomizing genes (birds)\n");
+		printf("  randomizing genes (birds)\n");
 		set_random_genes(ORG_TYPE_BIRD);
 	}
 	
@@ -599,8 +670,11 @@ void selection()
 	for(i=NUM_BEES;i<NUM_BEES+NUM_BIRDS && num_alive_birds;i++)
 	{
 		struct organism *o = &creatures[i];
-		if(!o->dead && o->moved)
-			memcpy(&parents_birds[j++], o, sizeof(*o));
+		if(!o->dead && o->moved) {
+			int k;
+			for(k=0;k<o->fitness;k++)
+				memcpy(&parents_birds[j++], o, sizeof(*o));
+		}
 	}
 	
 	reset_game_state();
@@ -618,6 +692,7 @@ void selection()
 		o->genetics.friendliness = parents_bees[b].genetics.friendliness;
 		o->genetics.frightfulness = parents_bees[b].genetics.frightfulness;
 		o->genetics.speed = parents_bees[b].genetics.speed;
+		mutate(o);
 	}
 	
 	for(i=NUM_BEES;i<NUM_BEES + NUM_BIRDS && num_alive_birds;i++) {
@@ -633,19 +708,29 @@ void selection()
 		o->genetics.friendliness = parents_birds[b].genetics.friendliness;
 		o->genetics.frightfulness = parents_birds[b].genetics.frightfulness;
 		o->genetics.speed = parents_birds[b].genetics.speed;
+		mutate(o);
 	}
+	
+	if(num_alive_bees)
+		printf("bee average fitness: %f. ", (double)fit_bees / true_num_alive_bees);
+	if(num_alive_birds)
+		printf("bird average fitness: %f. ", (double)fit_birds / true_num_alive_birds);
 	
 }
 
-volatile int flag=0;
-
+volatile int flag=0, alarm_count=0;
+int generation=0;
 void timeup(int s)
 {
-	flag=1;
+	alarm_count++;
+	printf("\rgeneration %d: %d seconds left.\r", generation, GAME_LENGTH - alarm_count);
+	if(alarm_count == GAME_LENGTH)
+		flag=1;
+	alarm(1);
 }
 
 int main(int argc, char **argv) {
-	int generation=0;
+	
 	init("Swarm");
 	setbuf(stdout, 0);
 	srandom(time(NULL));
@@ -658,8 +743,10 @@ int main(int argc, char **argv) {
 	
 	while(1) {
 		flag=0;
+		alarm_count=0;
 		generation++;
-		alarm(GAME_LENGTH);
+		printf("generation %d: ", generation);
+		alarm(1);
 		while (!flag)
 		{
 			getInput();
@@ -667,8 +754,10 @@ int main(int argc, char **argv) {
 			/* Sleep briefly to stop sucking up all the CPU time */
 			SDL_Delay(DELAY);
 		}
-		printf("completed generation: %d. Selecting...\n", generation);
+		alarm(0);
+		printf("completed generation: %d. performing selection...\n", generation);
 		selection();
+		printf("\n");
 	}
 	
     return 0;
